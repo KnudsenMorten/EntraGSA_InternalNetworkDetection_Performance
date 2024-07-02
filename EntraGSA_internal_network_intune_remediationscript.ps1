@@ -3,10 +3,8 @@ Write-host "********************************************************************
 Write-host "Entra Private Access | Intune remediation script for 'local access detection'"
 Write-host ""
 Write-host "Purpose:"
-Write-host "If client can do specific NSLOOKUP for internal DNS record, it is connected to internal network"
-write-host ""
-write-host "If connected to internal network, it will stop Entra GSA services (if running) to force client to do direct connection"
-write-host "If NOT connected to internal network, it will start Entra GSA services (if stopped)"
+write-host "If connected to internal network, it will suspend Entra Private Access (if running) to force client to do direct connection"
+write-host "If NOT connected to internal network, it will start Entra Private Access (if stopped)"
 Write-host "***********************************************************************************************"
 write-host ""
 #------------------------------------------------------------------------------------------------
@@ -15,16 +13,69 @@ write-host ""
 # VARIABLES
 ##################################
 
-    $Internal_DNSRecord_Name              = "<put in your DNS record here>"
-    $Internal_DNSRecord_Expected_Response = "<put in the expected IPv4 address here>"
+<#
+    #-----------------------------------------------------------------------------------------------------------------------------------
+    # Supported Modes
 
-    $RegPath                              = "HKLM:\SOFTWARE\EntraGSA_NetworkDetection"
+    #-----------------------------------------------------------------------------------------------------------------------------------
+    # Method #1 - DNSName-to-IP - Local DNS Name lookup - result should respond to IP addr
+    # NOTE: Requires local DNS solution like Windows AD DNS, InfoBlox, Router DNS, etc.
+    #-----------------------------------------------------------------------------------------------------------------------------------
+
+        $Mode                                 = "Resolve_DNSName-Vaidate_Against_IP"
+        $Target                               = "DC1.2linkit.local"
+        $ExpectedResult                       = "10.1.0.5"
+
+    #-----------------------------------------------------------------------------------------------------------------------------------
+    # Method #2A - IP-to-DNSName - IP address reverse lookup - result should respond to DNS hostname address - use specific DNS server
+    # NOTE: This DNS domain cannot be inside Private Access tunnel. Must be an external zone used locally
+    #       Reason: Entra Private Access treats any hosts names part of Private DNS-functionality as wildcards, so it will respond with an internal tunnel IP when client is running
+    #-----------------------------------------------------------------------------------------------------------------------------------
+
+        $Mode                                 = "Ping_DNSName-Resolve_DNSName_To_IP"
+        $Target                               = "10.1.0.5"
+        $ExpectedResult                       = "DC1.2linkit.local"
+        $DNSServerIP                          = "10.1.0.5"
+
+    #-----------------------------------------------------------------------------------------------------------------------------------
+    # Method #2B - IP-to-DNSName - IP address reverse lookup - result should respond to DNS hostname address - use DNS from IP/DHCP settings on client
+    # NOTE: This DNS domain cannot be inside Private Access tunnel. Must be an external zone used locally
+    #       Reason: Entra Private Access treats any hosts names part of Private DNS-functionality as wildcards, so it will respond with an internal tunnel IP when client is running
+    #-----------------------------------------------------------------------------------------------------------------------------------
+
+        $Mode                                 = "Ping_DNSName-Resolve_DNSName_To_IP"
+        $Target                               = "10.1.0.5"
+        $ExpectedResult                       = "DC1.2linkit.local"
+        $DNSServerIP                          = $null
+
+    #-----------------------------------------------------------------------------------------------------------------------------------
+    # Method #3 - IP-to-MACAddr - Ping IP addr and validate MAC address matches the expected result
+    # NOTE: Method can typically only be used when device is on same subnet as target IP device fx. router (switched network)
+    #       This method can easily be extended into an array covering all local sites, but it must be manually maintained
+    #-----------------------------------------------------------------------------------------------------------------------------------
+
+        $Mode                                 = "Ping_IP-Validate_MACAddr_Against_ARP_Cache"
+        $Target                               = "192.168.1.1"
+        $ExpectedResult                       = "d2-21-f9-7e-82-86"
+
+#>
+    #-----------------------------------------------------------------------------------------------------------------------------------
+    # Put you chosen method here below
+
+
+    #-----------------------------------------------------------------------------------------------------------------------------------
+
+    $RegPath                              = "HKCU:\SOFTWARE\EntraGSA_NetworkDetection"
     $RegKey_LastRemediation               = "EntraGSA_RemediationScript_Last_Run"
     $RegKey_SuspendRemediation            = "EntraGSA_SuspendNetworkDetectionRemediation"
+
+    $RegPathSuspendPrivateAccess          = "HKCU:\Software\Microsoft\Global Secure Access Client"
+    $RegKeySuspendPrivateAccess           = "IsPrivateAccessDisabledByUser"  # DWORD 0 = Private Access is Active, 1 = Private Access is Suspended
 
     $RerunEveryMin                        = 1
     $RerunNumberBeforeExiting             = 59 # When it hits the number, it forces script to Exit 1. It must be less than 1 hr, as remediation job kicks off hourly
     $RerunTesting                         = $False  # If $true it wil force script to run every 2 sec. If $False, if uses $RerunEveyMin
+
 
 ##################################
 # MAIN PROGRAM
@@ -53,21 +104,120 @@ While ($RunFrequency -le $RerunNumberBeforeExiting)
                     # Checking DNS record
                     Write-host "Script run frequency (loop): $($RunFrequency) / $($RerunNumberBeforeExiting)"
                     write-host ""
-                    Write-host "Checking DNS lookup for $($Internal_DNSRecord_Name)"
+                    Write-host "Mode  : $($Mode)"
+                    write-host ""
+                    write-host "Target: $($Target)"
                     Clear-DnsClientCache
-                    $DNSCheck = Resolve-DnsName -Name $Internal_DNSRecord_Name -Type A -ErrorAction SilentlyContinue
 
-                    If ( ($DNSCheck -eq $null) -or ($DNSCheck -eq "") )
+                    ################################################
+                    # (1) Resolve_DNSName-Vaidate_Against_IP
+                    ################################################
+
+                    If ($Mode -eq "Resolve_DNSName-Vaidate_Against_IP")
                         {
-                            $DNSCheck = [PSCustomObject]@{
-                                IPAddress = "NOT Found"
-                            }
+                            $DNSCheck = Resolve-DnsName -Name $Target -Type A -ErrorAction SilentlyContinue
+
+                            If ( ($DNSCheck -eq $null) -or ($DNSCheck -eq "") )
+                                {
+                                    $DNSCheck = [PSCustomObject]@{
+                                        IPAddress = "NOT Found"
+                                    }
+                                }
+
+                            write-host ""
+                            Write-host "IP Address (response): $($DNSCheck.IPAddress)"
+                            Write-host "IP Address (expected): $($ExpectedResult)"
+                            write-host ""
+
+                            If ($DNSCheck.IPAddress -eq $ExpectedResult)
+                                {
+                                    $LocalNetworkDetected = $true
+                                }
+                            Else
+                                {
+                                    $LocalNetworkDetected = $false
+                                }
                         }
 
-                    write-host ""
-                    Write-host "IP Address (response): $($DNSCheck.IPAddress)"
-                    Write-host "IP Address (expected): $($Internal_DNSRecord_Expected_Response)"
-                    write-host ""
+
+                    ################################################
+                    # (2) Ping_IP-Resolve-to-DNSName
+                    ################################################
+                    ElseIf ($Mode -eq "Ping_IP-Resolve-to-DNSName")
+                        {
+                            $PingCheck = Test-Connection $Target -Count 3 -Quiet -ErrorAction SilentlyContinue
+                            If ($PingCheck)  # True
+                                {
+                                    If ($DNSServerIP)
+                                        {
+                                            $DNSCheck = Resolve-DnsName -Name $Target -Type PTR -Server $DNSServerIP -ErrorAction SilentlyContinue
+                                        }
+                                    Else
+                                        {
+                                            $DNSCheck = Resolve-DnsName -Name $Target -Type PTR -ErrorAction SilentlyContinue
+                                        }
+                                }
+
+                            If ( ($DNSCheck -eq $null) -or ($DNSCheck -eq "") )
+                                {
+                                    $DNSCheck = [PSCustomObject]@{
+                                        IPAddress = "NOT Found"
+                                    }
+                                }
+
+                            write-host ""
+                            Write-host "IP Address (response): $($DNSCheck.NameHost)"
+                            Write-host "IP Address (expected): $($ExpectedResult)"
+                            write-host ""
+
+                            If ($DNSCheck.NameHost -eq $Target)
+                                {
+                                    $LocalNetworkDetected = $true
+                                }
+                            Else
+                                {
+                                    $LocalNetworkDetected = $false
+                                }
+                        }
+
+
+                    ################################################
+                    # (3) Ping_IP-Validate_MACAddr_Against_ARP_Cache
+                    ################################################
+                    ElseIf ($Mode -eq "Ping_IP-Validate_MACAddr_Against_ARP_Cache")
+                        {
+                            $DNSCheck = Test-Connection $Target -Count 3 -Quiet -ErrorAction SilentlyContinue
+                            If ($DNSCheck)  # True
+                                {
+                                    $ARPCache = Get-NetNeighbor -IncludeAllCompartments -AddressFamily IPv4
+                                    If ($ARPCache)
+                                        {
+                                            $MACAddr = "NOT_FOUND"
+                                            $ValidateARPCache = $ARPCache | Where-Object { ($_.IPAddress -eq $Target) }
+                                            ForEach ($Entry in $ValidateARPCache)
+                                                {
+                                                    If ($Entry.IPAddress -eq $Target)
+                                                        {
+                                                            $MACAddr = $Entry.LinkLayerAddress
+                                                        }
+                                                }
+                                        }
+
+                                    write-host ""
+                                    Write-host "IP Address (response): $($MacAddr)"
+                                    Write-host "IP Address (expected): $($ExpectedResult)"
+                                    write-host ""
+
+                                    If ($MacAddr -eq $ExpectedResult)
+                                        {
+                                            $LocalNetworkDetected = $true
+                                        }
+                                    Else
+                                        {
+                                            $LocalNetworkDetected = $false
+                                        }
+                                }
+                        }
 
 
                 ########################################################
@@ -77,28 +227,25 @@ While ($RunFrequency -le $RerunNumberBeforeExiting)
                     ########################################################
                     # Internal network was detected
                     ########################################################
-                    If ($DNSCheck.IPAddress -eq $Internal_DNSRecord_Expected_Response)
+                    If ($LocalNetworkDetected)
                         {
                             Write-host "Computer is connected to internal network" -ForegroundColor Cyan
 
-                            $GSA_ServiceStatus = Get-Service "GlobalSecureAccessTunnelingService" -ErrorAction SilentlyContinue
+                            $KeyValue = Get-ItemPropertyValue $RegPathSuspendPrivateAccess -Name $RegKeySuspendPrivateAccess -ErrorAction SilentlyContinue
 
-                            If ($GSA_ServiceStatus.Status -eq "Running")
+                            If ( ($KeyValue -eq $null) -or ($KeyValue -eq 0) )  # DWORD 0 = Private Access is Active, 1 = Private Access is Suspended
                                 {
                                     write-host ""
-                                    Write-host "Remediation: Stopping Entra GSA services" -ForegroundColor Yellow
-                                    write-host "Check:       Internal network is detected and Entra GSA services was running"
+                                    Write-host "Remediation: Suspending Entra Private Access services" -ForegroundColor Yellow
                                     write-host ""
 
-                                    Stop-Service "GlobalSecureAccessTunnelingService" -Force -ErrorAction SilentlyContinue
-                                    Stop-Service "GlobalSecureAccessPolicyRetrieverService" -Force -ErrorAction SilentlyContinue
-                                    Stop-Service "GlobalSecureAccessManagementService" -Force -ErrorAction SilentlyContinue
+                                    $Result = New-Item -Path "$($RegPathSuspendPrivateAccess)" -ErrorAction SilentlyContinue
+                                    $Result = Set-ItemProperty -Path "$($RegPathSuspendPrivateAccess)"  -Name $RegKeySuspendPrivateAccess -Value 1 -Type DWord -Force -ErrorAction SilentlyContinue
                                 }
-                            ElseIf ($GSA_ServiceStatus.Status -eq "Stopped")
+                            ElseIf ($KeyValue -eq 1)  # Entra Private Access is disabled !!
                                 {
                                     write-host ""
-                                    Write-host "Success: Entra GSA services are stopped" -ForegroundColor Green
-                                    write-host "Check:   Internal network is detected and Entra GSA services are stopped"
+                                    Write-host "Success: Entra Private Access is already suspended" -ForegroundColor Green
                                     write-host ""
                                 }
                         }
@@ -106,28 +253,25 @@ While ($RunFrequency -le $RerunNumberBeforeExiting)
                     ########################################################
                     # Internal network was NOT detected
                     ########################################################
-                    ElseIf ($DNSCheck.IPAddress -ne $Internal_DNSRecord_Expected_Response)
+                    ElseIf (!($LocalNetworkDetected))
                         {
                             Write-host "Computer is NOT connected to internal network" -ForegroundColor Cyan
 
-                            $GSA_ServiceStatus = Get-Service "GlobalSecureAccessTunnelingService" -ErrorAction SilentlyContinue
+                            $KeyValue = Get-ItemPropertyValue $RegPathSuspendPrivateAccess -Name $RegKeySuspendPrivateAccess -ErrorAction SilentlyContinue
 
-                            If ($GSA_ServiceStatus.Status -eq "Stopped")
+                            If ( ($KeyValue -eq $null) -or ($KeyValue -eq 1) )  # DWORD 0 = Private Access is Active, 1 = Private Access is Suspended
                                 {
                                     write-host ""
-                                    Write-host "Remediation: Starting Entra GSA services" -ForegroundColor Yellow
-                                    write-host "Check:       Internal network is NOT detected and Entra GSA services was stopped"
+                                    Write-host "Remediation: Starting Entra Private Access services" -ForegroundColor Yellow
                                     write-host ""
 
-                                    Start-Service "GlobalSecureAccessTunnelingService" -ErrorAction SilentlyContinue
-                                    Start-Service "GlobalSecureAccessPolicyRetrieverService" -ErrorAction SilentlyContinue
-                                    Start-Service "GlobalSecureAccessManagementService" -ErrorAction SilentlyContinue
+                                    $Result = New-Item -Path "$($RegPathSuspendPrivateAccess)" -ErrorAction SilentlyContinue
+                                    $Result = Set-ItemProperty -Path "$($RegPathSuspendPrivateAccess)"  -Name $RegKeySuspendPrivateAccess -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
                                 }
-                            ElseIf ($GSA_ServiceStatus.Status -eq "Running")
+                            ElseIf ($KeyValue -eq 0)  # Entra Private Access is running !!
                                 {
                                     write-host ""
-                                    Write-host "Success: Entra GSA services are running" -ForegroundColor Green
-                                    write-host "Check:   Internal network is NOT detected and Entra GSA services are already running"
+                                    Write-host "Success: Entra Private Access is already running" -ForegroundColor Green
                                     write-host ""
                                 }
                         }
