@@ -8,7 +8,7 @@ Write-host "********************************************************************
 write-host ""
 #------------------------------------------------------------------------------------------------
 
-    $RegPath                    = "HKLM:\SOFTWARE\EntraGSA_NetworkDetection"
+    $RegPath                    = "HKCU:\SOFTWARE\EntraGSA_NetworkDetection"
     $RegKey_SuspendRemediation  = "EntraGSA_SuspendNetworkDetectionRemediation"
 
     $SuspendStatusValue         = 1   # 0=disable script suspension - 1=enable script suspension

@@ -18,16 +18,16 @@ write-host ""
     # Supported Modes
 
     #-----------------------------------------------------------------------------------------------------------------------------------
-    # Method #1 - DNSName-to-IP - Local DNS Name lookup - result should respond to IP addr
+    # Method #1 - Resolve_DNSName-Validate_Against_IP - Local DNS Name lookup - result should respond to IP addr
     # NOTE: Requires local DNS solution like Windows AD DNS, InfoBlox, Router DNS, etc.
     #-----------------------------------------------------------------------------------------------------------------------------------
 
-        $Mode                                 = "Resolve_DNSName-Vaidate_Against_IP"
+        $Mode                                 = "Resolve_DNSName-Validate_Against_IP"
         $Target                               = "DC1.2linkit.local"
         $ExpectedResult                       = "10.1.0.5"
 
     #-----------------------------------------------------------------------------------------------------------------------------------
-    # Method #2A - IP-to-DNSName - IP address reverse lookup - result should respond to DNS hostname address - use specific DNS server
+    # Method #2A - Ping_DNSName-Resolve_DNSName_To_IP - IP address reverse lookup - result should respond to DNS hostname address - use specific DNS server
     # NOTE: This DNS domain cannot be inside Private Access tunnel. Must be an external zone used locally
     #       Reason: Entra Private Access treats any hosts names part of Private DNS-functionality as wildcards, so it will respond with an internal tunnel IP when client is running
     #-----------------------------------------------------------------------------------------------------------------------------------
@@ -38,7 +38,7 @@ write-host ""
         $DNSServerIP                          = "10.1.0.5"
 
     #-----------------------------------------------------------------------------------------------------------------------------------
-    # Method #2B - IP-to-DNSName - IP address reverse lookup - result should respond to DNS hostname address - use DNS from IP/DHCP settings on client
+    # Method #2B - Ping_DNSName-Resolve_DNSName_To_IP - IP address reverse lookup - result should respond to DNS hostname address - use DNS from IP/DHCP settings on client
     # NOTE: This DNS domain cannot be inside Private Access tunnel. Must be an external zone used locally
     #       Reason: Entra Private Access treats any hosts names part of Private DNS-functionality as wildcards, so it will respond with an internal tunnel IP when client is running
     #-----------------------------------------------------------------------------------------------------------------------------------
@@ -49,7 +49,7 @@ write-host ""
         $DNSServerIP                          = $null
 
     #-----------------------------------------------------------------------------------------------------------------------------------
-    # Method #3 - IP-to-MACAddr - Ping IP addr and validate MAC address matches the expected result
+    # Method #3 - Ping_IP-Validate_MACAddr_Against_ARP_Cache - Ping IP addr and validate MAC address matches the expected result
     # NOTE: Method can typically only be used when device is on same subnet as target IP device fx. router (switched network)
     #       This method can easily be extended into an array covering all local sites, but it must be manually maintained
     #-----------------------------------------------------------------------------------------------------------------------------------
@@ -113,7 +113,7 @@ While ($RunFrequency -le $RerunNumberBeforeExiting)
                     # (1) Resolve_DNSName-Vaidate_Against_IP
                     ################################################
 
-                    If ($Mode -eq "Resolve_DNSName-Vaidate_Against_IP")
+                    If ($Mode -eq "Resolve_DNSName-Validate_Against_IP")
                         {
                             $DNSCheck = Resolve-DnsName -Name $Target -Type A -ErrorAction SilentlyContinue
 

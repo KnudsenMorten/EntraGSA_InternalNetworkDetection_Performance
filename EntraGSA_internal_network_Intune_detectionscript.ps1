@@ -14,7 +14,7 @@ write-host ""
 # VARIABLES
 ##################################
 
-    $RegPath                              = "HKLM:\SOFTWARE\EntraGSA_NetworkDetection"
+    $RegPath                              = "HKCU:\SOFTWARE\EntraGSA_NetworkDetection"
     $RegKey_LastDetection                 = "EntraGSA_DetectionScript_Last_Run"
 
 
