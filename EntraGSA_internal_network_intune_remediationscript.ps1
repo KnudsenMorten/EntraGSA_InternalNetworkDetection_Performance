@@ -18,38 +18,39 @@ write-host ""
     # Supported Modes
 
     #-----------------------------------------------------------------------------------------------------------------------------------
-    # Method #1 - Resolve_DNSName-Validate_Against_IP - Local DNS Name lookup - result should respond to IP addr
+    # Method #1 - DNSName-to-IP - Local DNS Name lookup - result should respond to IP addr
     # NOTE: Requires local DNS solution like Windows AD DNS, InfoBlox, Router DNS, etc.
     #-----------------------------------------------------------------------------------------------------------------------------------
 
         $Mode                                 = "Resolve_DNSName-Validate_Against_IP"
         $Target                               = "DC1.2linkit.local"
         $ExpectedResult                       = "10.1.0.5"
+        $FailoverTargetIP                     = "172.22.0.11"
 
     #-----------------------------------------------------------------------------------------------------------------------------------
-    # Method #2A - Ping_DNSName-Resolve_DNSName_To_IP - IP address reverse lookup - result should respond to DNS hostname address - use specific DNS server
+    # Method #2A - IP-to-DNSName - IP address reverse lookup - result should respond to DNS hostname address - use specific DNS server
     # NOTE: This DNS domain cannot be inside Private Access tunnel. Must be an external zone used locally
     #       Reason: Entra Private Access treats any hosts names part of Private DNS-functionality as wildcards, so it will respond with an internal tunnel IP when client is running
     #-----------------------------------------------------------------------------------------------------------------------------------
 
-        $Mode                                 = "Ping_DNSName-Resolve_DNSName_To_IP"
+        $Mode                                 = "Ping_IP-Resolve-to-DNSName"
         $Target                               = "10.1.0.5"
         $ExpectedResult                       = "DC1.2linkit.local"
         $DNSServerIP                          = "10.1.0.5"
 
     #-----------------------------------------------------------------------------------------------------------------------------------
-    # Method #2B - Ping_DNSName-Resolve_DNSName_To_IP - IP address reverse lookup - result should respond to DNS hostname address - use DNS from IP/DHCP settings on client
+    # Method #2B - IP-to-DNSName - IP address reverse lookup - result should respond to DNS hostname address - use DNS from IP/DHCP settings on client
     # NOTE: This DNS domain cannot be inside Private Access tunnel. Must be an external zone used locally
     #       Reason: Entra Private Access treats any hosts names part of Private DNS-functionality as wildcards, so it will respond with an internal tunnel IP when client is running
     #-----------------------------------------------------------------------------------------------------------------------------------
 
-        $Mode                                 = "Ping_DNSName-Resolve_DNSName_To_IP"
+        $Mode                                 = "Ping_IP-Resolve-to-DNSName"
         $Target                               = "10.1.0.5"
         $ExpectedResult                       = "DC1.2linkit.local"
         $DNSServerIP                          = $null
 
     #-----------------------------------------------------------------------------------------------------------------------------------
-    # Method #3 - Ping_IP-Validate_MACAddr_Against_ARP_Cache - Ping IP addr and validate MAC address matches the expected result
+    # Method #3 - IP-to-MACAddr - Ping IP addr and validate MAC address matches the expected result
     # NOTE: Method can typically only be used when device is on same subnet as target IP device fx. router (switched network)
     #       This method can easily be extended into an array covering all local sites, but it must be manually maintained
     #-----------------------------------------------------------------------------------------------------------------------------------
@@ -61,6 +62,10 @@ write-host ""
 #>
     #-----------------------------------------------------------------------------------------------------------------------------------
     # Put you chosen method here below
+        $Mode                                 = "Resolve_DNSName-Validate_Against_IP"
+        $Target                               = "GSA-TEST.xxxxxx"
+        $ExpectedResult                       = "172.22.0.1"
+        $FailoverTargetIP                     = "172.22.0.11"
 
 
     #-----------------------------------------------------------------------------------------------------------------------------------
@@ -74,7 +79,9 @@ write-host ""
 
     $RerunEveryMin                        = 1
     $RerunNumberBeforeExiting             = 59 # When it hits the number, it forces script to Exit 1. It must be less than 1 hr, as remediation job kicks off hourly
-    $RerunTesting                         = $False  # If $true it wil force script to run every 2 sec. If $False, if uses $RerunEveyMin
+    $RerunTesting                         = $false  # If $true it wil force script to run every 2 sec. If $False, if uses $RerunEveyMin
+
+
 
 
 ##################################
@@ -110,11 +117,12 @@ While ($RunFrequency -le $RerunNumberBeforeExiting)
                     Clear-DnsClientCache
 
                     ################################################
-                    # (1) Resolve_DNSName-Vaidate_Against_IP
+                    # (1) Resolve_DNSName-Validate_Against_IP
                     ################################################
 
                     If ($Mode -eq "Resolve_DNSName-Validate_Against_IP")
                         {
+                            $FailoverActive = $false
                             $DNSCheck = Resolve-DnsName -Name $Target -Type A -ErrorAction SilentlyContinue
 
                             If ( ($DNSCheck -eq $null) -or ($DNSCheck -eq "") )
@@ -122,20 +130,39 @@ While ($RunFrequency -le $RerunNumberBeforeExiting)
                                     $DNSCheck = [PSCustomObject]@{
                                         IPAddress = "NOT Found"
                                     }
+
+                                    write-host ""
+                                    write-host "Failover-mode .... Doing a secondary ping test" -ForegroundColor Yellow
+
+                                    # Failover to try to test using ping
+                                    $PingCheck = Test-Connection $FailoverTargetIP -Count 3 -Quiet -ErrorAction SilentlyContinue
+                                    $FailoverActive = $true
+
+                                    If ($PingCheck)
+                                        {
+                                            $LocalNetworkDetected = $true
+                                        }
+                                    Else
+                                        {
+                                            $LocalNetworkDetected = $false
+                                        }
                                 }
 
-                            write-host ""
-                            Write-host "IP Address (response): $($DNSCheck.IPAddress)"
-                            Write-host "IP Address (expected): $($ExpectedResult)"
-                            write-host ""
+                            If (!($FailoverActive))
+                                {
+                                    write-host ""
+                                    Write-host "IP Address (response): $($DNSCheck.IPAddress)"
+                                    Write-host "IP Address (expected): $($ExpectedResult)"
+                                    write-host ""
 
-                            If ($DNSCheck.IPAddress -eq $ExpectedResult)
-                                {
-                                    $LocalNetworkDetected = $true
-                                }
-                            Else
-                                {
-                                    $LocalNetworkDetected = $false
+                                    If ($DNSCheck.IPAddress -eq $ExpectedResult)
+                                        {
+                                            $LocalNetworkDetected = $true
+                                        }
+                                    Else
+                                        {
+                                            $LocalNetworkDetected = $false
+                                        }
                                 }
                         }
 
@@ -146,6 +173,7 @@ While ($RunFrequency -le $RerunNumberBeforeExiting)
                     ElseIf ($Mode -eq "Ping_IP-Resolve-to-DNSName")
                         {
                             $PingCheck = Test-Connection $Target -Count 3 -Quiet -ErrorAction SilentlyContinue
+
                             If ($PingCheck)  # True
                                 {
                                     If ($DNSServerIP)
@@ -179,7 +207,6 @@ While ($RunFrequency -le $RerunNumberBeforeExiting)
                                     $LocalNetworkDetected = $false
                                 }
                         }
-
 
                     ################################################
                     # (3) Ping_IP-Validate_MACAddr_Against_ARP_Cache
