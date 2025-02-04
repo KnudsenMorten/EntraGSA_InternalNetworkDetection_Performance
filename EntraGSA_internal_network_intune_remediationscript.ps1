@@ -261,7 +261,7 @@ While ($RunFrequency -le $RerunNumberBeforeExiting)
 
                             #------------------------------------------------------------------------------------------------------------------------------------
                             # Rollback to v1 method, where the entire GSA client will be turned off. Bug detected, where DNS is not working when only GSA Private Access is turned off !!
-                            $GSA_ServiceStatus = Get-Service "GlobalSecureAccessTunnelingService" -ErrorAction SilentlyContinue
+                            $GSA_ServiceStatus = Get-Service "GlobalSecureAccessEngineService" -ErrorAction SilentlyContinue
 
                             If ($GSA_ServiceStatus.Status -eq "Running")
                                 {
@@ -273,6 +273,9 @@ While ($RunFrequency -le $RerunNumberBeforeExiting)
                                     Stop-Service "GlobalSecureAccessTunnelingService" -Force -ErrorAction SilentlyContinue
                                     Stop-Service "GlobalSecureAccessPolicyRetrieverService" -Force -ErrorAction SilentlyContinue
                                     Stop-Service "GlobalSecureAccessManagementService" -Force -ErrorAction SilentlyContinue
+                                    Stop-Service "GlobalSecureAccessEngineService" -ErrorAction SilentlyContinue
+                                    Clear-DnsClientCache
+
                                 }
                             ElseIf ($GSA_ServiceStatus.Status -eq "Stopped")
                                 {
@@ -315,7 +318,7 @@ While ($RunFrequency -le $RerunNumberBeforeExiting)
 
                             #------------------------------------------------------------------------------------------------------------------------------------
                             # Rollback to v1 method, where the entire GSA client will be turned off. Bug detected, where DNS is not working when only GSA Private Access is turned off !!
-                            $GSA_ServiceStatus = Get-Service "GlobalSecureAccessTunnelingService" -ErrorAction SilentlyContinue
+                            $GSA_ServiceStatus = Get-Service "GlobalSecureAccessEngineService" -ErrorAction SilentlyContinue
 
                             If ($GSA_ServiceStatus.Status -eq "Stopped")
                                 {
@@ -327,9 +330,11 @@ While ($RunFrequency -le $RerunNumberBeforeExiting)
                                     Start-Service "GlobalSecureAccessTunnelingService" -ErrorAction SilentlyContinue
                                     Start-Service "GlobalSecureAccessPolicyRetrieverService" -ErrorAction SilentlyContinue
                                     Start-Service "GlobalSecureAccessManagementService" -ErrorAction SilentlyContinue
+                                    Start-Service "GlobalSecureAccessEngineService" -ErrorAction SilentlyContinue
 
                                     $Result = New-Item -Path "$($RegPathSuspendPrivateAccess)" -ErrorAction SilentlyContinue
                                     $Result = Set-ItemProperty -Path "$($RegPathSuspendPrivateAccess)"  -Name $RegKeySuspendPrivateAccess -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
+                                    Clear-DnsClientCache
                                 }
                             ElseIf ($GSA_ServiceStatus.Status -eq "Running")
                                 {
