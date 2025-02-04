@@ -258,31 +258,6 @@ While ($RunFrequency -le $RerunNumberBeforeExiting)
                         {
                             Write-host "Computer is connected to internal network" -ForegroundColor Cyan
 
-
-# Rollback to v1 method, where the entire GSA client will be turned off. Bug detected, where DNS is not working when only GSA Private Access is turned off !!
-                            $GSA_ServiceStatus = Get-Service "GlobalSecureAccessTunnelingService" -ErrorAction SilentlyContinue
-
-                            If ($GSA_ServiceStatus.Status -eq "Running")
-                                {
-                                    write-host ""
-                                    Write-host "Remediation: Stopping Entra GSA services" -ForegroundColor Yellow
-                                    write-host "Check:       Internal network is detected and Entra GSA services was running"
-                                    write-host ""
-
-                                    Stop-Service "GlobalSecureAccessTunnelingService" -Force -ErrorAction SilentlyContinue
-                                    Stop-Service "GlobalSecureAccessPolicyRetrieverService" -Force -ErrorAction SilentlyContinue
-                                    Stop-Service "GlobalSecureAccessManagementService" -Force -ErrorAction SilentlyContinue
-                                }
-                            ElseIf ($GSA_ServiceStatus.Status -eq "Stopped")
-                                {
-                                    write-host ""
-                                    Write-host "Success: Entra GSA services are stopped" -ForegroundColor Green
-                                    write-host "Check:   Internal network is detected and Entra GSA services are stopped"
-                                    write-host ""
-                                }
-
-<# V2 CODE - NOT WORKING AS DNS IS NOT WORKING WHEN GSA PRIVATE ACCESS IS SUSPENDED !!!
-
                             $KeyValue = Get-ItemPropertyValue $RegPathSuspendPrivateAccess -Name $RegKeySuspendPrivateAccess -ErrorAction SilentlyContinue
 
                             If ( ($KeyValue -eq $null) -or ($KeyValue -eq 0) )  # DWORD 0 = Private Access is Active, 1 = Private Access is Suspended
@@ -300,7 +275,6 @@ While ($RunFrequency -le $RerunNumberBeforeExiting)
                                     Write-host "Success: Entra Private Access is already suspended" -ForegroundColor Green
                                     write-host ""
                                 }
-#>
                         }
 
                     ########################################################
@@ -309,30 +283,6 @@ While ($RunFrequency -le $RerunNumberBeforeExiting)
                     ElseIf (!($LocalNetworkDetected))
                         {
                             Write-host "Computer is NOT connected to internal network" -ForegroundColor Cyan
-
-# Rollback to v1 method, where the entire GSA client will be turned off. Bug detected, where DNS is not working when only GSA Private Access is turned off !!
-                            $GSA_ServiceStatus = Get-Service "GlobalSecureAccessTunnelingService" -ErrorAction SilentlyContinue
-
-                            If ($GSA_ServiceStatus.Status -eq "Stopped")
-                                {
-                                    write-host ""
-                                    Write-host "Remediation: Starting Entra GSA services" -ForegroundColor Yellow
-                                    write-host "Check:       Internal network is NOT detected and Entra GSA services was stopped"
-                                    write-host ""
-
-                                    Start-Service "GlobalSecureAccessTunnelingService" -ErrorAction SilentlyContinue
-                                    Start-Service "GlobalSecureAccessPolicyRetrieverService" -ErrorAction SilentlyContinue
-                                    Start-Service "GlobalSecureAccessManagementService" -ErrorAction SilentlyContinue
-                                }
-                            ElseIf ($GSA_ServiceStatus.Status -eq "Running")
-                                {
-                                    write-host ""
-                                    Write-host "Success: Entra GSA services are running" -ForegroundColor Green
-                                    write-host "Check:   Internal network is NOT detected and Entra GSA services are already running"
-                                    write-host ""
-                                }
-
-<# V2 CODE - NOT WORKING AS DNS IS NOT WORKING WHEN GSA PRIVATE ACCESS IS SUSPENDED !!!
 
                             $KeyValue = Get-ItemPropertyValue $RegPathSuspendPrivateAccess -Name $RegKeySuspendPrivateAccess -ErrorAction SilentlyContinue
 
@@ -351,7 +301,6 @@ While ($RunFrequency -le $RerunNumberBeforeExiting)
                                     Write-host "Success: Entra Private Access is already running" -ForegroundColor Green
                                     write-host ""
                                 }
-#>
                         }
 
 
