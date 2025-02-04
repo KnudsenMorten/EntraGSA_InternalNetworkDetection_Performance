@@ -259,7 +259,7 @@ While ($RunFrequency -le $RerunNumberBeforeExiting)
                             Write-host "Computer is connected to internal network" -ForegroundColor Cyan
 
 
-# Rollback to v1 method, where the entire GSA client will be turned off. Bug detected, where DNS is not working when only GSA Private Access is turned off !!
+            # Rollback to v1 method, where the entire GSA client will be turned off. Bug detected, where DNS is not working when only GSA Private Access is turned off !!
                             $GSA_ServiceStatus = Get-Service "GlobalSecureAccessTunnelingService" -ErrorAction SilentlyContinue
 
                             If ($GSA_ServiceStatus.Status -eq "Running")
@@ -281,7 +281,7 @@ While ($RunFrequency -le $RerunNumberBeforeExiting)
                                     write-host ""
                                 }
 
-<# V2 CODE - NOT WORKING AS DNS IS NOT WORKING WHEN GSA PRIVATE ACCESS IS SUSPENDED !!!
+            <# V2 CODE - NOT WORKING AS DNS IS NOT WORKING WHEN GSA PRIVATE ACCESS IS SUSPENDED !!!
 
                             $KeyValue = Get-ItemPropertyValue $RegPathSuspendPrivateAccess -Name $RegKeySuspendPrivateAccess -ErrorAction SilentlyContinue
 
@@ -300,7 +300,7 @@ While ($RunFrequency -le $RerunNumberBeforeExiting)
                                     Write-host "Success: Entra Private Access is already suspended" -ForegroundColor Green
                                     write-host ""
                                 }
-#>
+            #>
                         }
 
                     ########################################################
@@ -310,7 +310,7 @@ While ($RunFrequency -le $RerunNumberBeforeExiting)
                         {
                             Write-host "Computer is NOT connected to internal network" -ForegroundColor Cyan
 
-# Rollback to v1 method, where the entire GSA client will be turned off. Bug detected, where DNS is not working when only GSA Private Access is turned off !!
+                # Rollback to v1 method, where the entire GSA client will be turned off. Bug detected, where DNS is not working when only GSA Private Access is turned off !!
                             $GSA_ServiceStatus = Get-Service "GlobalSecureAccessTunnelingService" -ErrorAction SilentlyContinue
 
                             If ($GSA_ServiceStatus.Status -eq "Stopped")
@@ -332,7 +332,7 @@ While ($RunFrequency -le $RerunNumberBeforeExiting)
                                     write-host ""
                                 }
 
-<# V2 CODE - NOT WORKING AS DNS IS NOT WORKING WHEN GSA PRIVATE ACCESS IS SUSPENDED !!!
+                <# V2 CODE - NOT WORKING AS DNS IS NOT WORKING WHEN GSA PRIVATE ACCESS IS SUSPENDED !!!
 
                             $KeyValue = Get-ItemPropertyValue $RegPathSuspendPrivateAccess -Name $RegKeySuspendPrivateAccess -ErrorAction SilentlyContinue
 
@@ -351,7 +351,7 @@ While ($RunFrequency -le $RerunNumberBeforeExiting)
                                     Write-host "Success: Entra Private Access is already running" -ForegroundColor Green
                                     write-host ""
                                 }
-#>
+            #>
                         }
 
 
